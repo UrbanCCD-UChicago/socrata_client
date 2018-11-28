@@ -11,6 +11,7 @@ defmodule Socrata.MixProject do
 
       # distribution
       name: "Socrata",
+      description: "A thin client library for Socrata",
       source_url: "https://github.com/UrbanCCD-UChicago/socrata",
       docs: [
         main: "Socrata"
