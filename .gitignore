@@ -25,3 +25,4 @@ socrata-*.tar
 # Ide type stuff
 .tool-versions
 .vs-code
+.elixir_ls
