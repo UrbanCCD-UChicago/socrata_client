@@ -8,20 +8,24 @@ the Socrata SODA 2.1+ API.
 This library is available via Hex. To add it as a dependency to your
 application, add the following to your `mix.exs` file:
 
-    defp deps do
-      [
-        {:socrata, ">= 0.0.0"}
-      ]
-    end
+```elixir
+defp deps do
+  [
+    {:socrata, ">= 0.0.0"}
+  ]
+end
+```
 
 ## Configuration
 
 There are two optional configuration values that you can supply via your
 application's `config/config.exs` file:
 
-    config :socrata,
-      domain: "example.com",
-      app_token: "blah blah blah"
+```elixir
+config :socrata,
+  domain: "example.com",
+  app_token: "blah blah blah"
+```
 
 Using the `domain` config sets a default Socrata domain for all of your
 requests. This can be overwritten when calling `Socrata.Client.new/3` if
@@ -41,38 +45,45 @@ There are two endpoints that the `Socrata.Client` module will work with:
 
 ### Metadata Client Example
 
-    alias Socrata.Client
+```elixir
+alias Socrata.Client
 
-    Rader.new("6zsd-86xi", "data.cityofchicago.org")
-    |> Client.get_view()
+%HTTPoison.Response{body: body} =
+  Client.new("data.cityofchicago.org")
+  |> Client.get_view("yama-9had")
 
-    # %HTTPoison.Response{
-    #   body: "{\\"name\\": \\"Crimes - 2001 to present\\", ... }",
-    #   headers: [ {"X-Socrata-RequestId", "blahblahblah"}, ... ],
-    #   request_url: "https://data.cityofchicago.org/views/6zsd-86xi.json",
-    #   status_code: 200
-    # }
+details = Jason.decode!(body)
+Map.keys(details)
+
+# ["oid", "publicationAppendEnabled", "category", "numberOfComments",
+#  "createdAt", "attribution", "hideFromDataJson", "query", "id", "tableAuthor"
+#  "rights", "tableId", "attributionLink", "owner", "viewCount", "grants",
+#  "downloadCount", "flags", "publicationGroup", "name", "averageRating",
+#  "publicationDate", "hideFromCatalog", "provenance", "totalTimesRated",
+#  "description", "metadata", "viewLastModified", "rowsUpdatedAt", "rowsUpdatedBy",
+#  "viewType", "newBackend", "publicationStage", "tags", "columns"]
+```
 
 ### Getting Records as JSON
 
 By default, calling `Socrata.Client.get_records/4` will use the `.json` API
 syntax and the response body will be encoded JSON.
 
-    alias Socrata.{Client, Query}
+```elixir
+alias Socrata.{Client, Query}
 
-    query =
-      Query.new()
-      |> Query.limit(5)
+client = Client.new("data.cityofchicago.org")
 
-    Client.new("6zsd-86xi", "data.cityofchicago.org")
-    |> Client.get_records(query)
+query =
+  Query.new("yama-9had")
+  |> Query.limit(2)
 
-    # %HTTPoison.Response{
-    #   body: "[{\\"arrest\\":false,\\"beat\\":\\"0412\\",\\"block\\":\\"016XX E 86TH PL\\", ...}, ... ]",
-    #   headers: [ {"X-Socrata-RequestId", "blahblahblah"}, ... ],
-    #   request_url: "https://data.cityofchicago.org/resource/6zsd-86xi.json?%24limit=5",
-    #   status_code: 200
-    # }
+%HTTPoison.Response{body: body} = Client.get_records(client, query)
+records = Jason.decode!(body)
+length(records)
+
+# 2
+```
 
 ### Getting Records as CSV
 
@@ -80,21 +91,26 @@ You can provide a third argument to `Socrata.Client.get_records/4` to specify
 the API response syntax. In this case, we'll set it to `"csv"` and get back
 an encoded CSV document in the response body.
 
-    alias Socrata.{Client, Query}
+```elixir
+alias Socrata.{Client, Query}
 
-    query =
-      Query.new()
-      |> Query.limit(5)
+client = Client.new("data.cityofchicago.org")
 
-    Client.new("6zsd-86xi", "data.cityofchicago.org")
-    |> Client.get_records(query, "csv")
+query =
+  Query.new("yama-9had")
+  |> Query.limit(2)
 
-    # %HTTPoison.Response{
-    #   body: "\\"arrest\\",\\"beat\\",\\"block\\",...\\n\\"false\\",\\"0412\\",\\"016XX E 86TH PL\\",...\\n",
-    #   headers: [ {"X-Socrata-RequestId", "blahblahblah"}, ... ],
-    #   request_url: "https://data.cityofchicago.org/resource/6zsd-86xi.csv?%24limit=5",
-    #   status_code: 200
-    # }
+%HTTPoison.Response{body: body} = Client.get_records(client, query, "csv")
+{:ok, stream} = StringIO.open(body)
+
+records =
+  IO.binstream(stream, :line)
+  |> CSV.decode!(headers: true)
+  |> Enum.map(& &1)
+
+length(records)
+# 2
+```
 
 ### Getting Records as TSV
 
@@ -102,21 +118,26 @@ You can provide a third argument to `Socrata.Client.get_records/4` to specify
 the API response syntax. In this case, we'll set it to `"tsv"` and get back
 an encoded TSV document in the response body.
 
-    alias Socrata.{Client, Query}
+```elixir
+alias Socrata.{Client, Query}
 
-    query =
-      Query.new()
-      |> Query.limit(5)
+client = Client.new("data.cityofchicago.org")
 
-    Client.new("6zsd-86xi", "data.cityofchicago.org")
-    |> Client.get_records(query, "tsv")
+query =
+  Query.new("yama-9had")
+  |> Query.limit(2)
 
-    # %HTTPoison.Response{
-    #   body: "\\"arrest\\"\\t\\"beat\\"\\t\\"block\\"\\t...\\n\\"false\\"\\t\\"0412\\"\\t\\"016XX E 86TH PL\\"\\t...\\n",
-    #   headers: [ {"X-Socrata-RequestId", "blahblahblah"}, ... ],
-    #   request_url: "https://data.cityofchicago.org/resource/6zsd-86xi.tsv?%24limit=5",
-    #   status_code: 200
-    # }
+%HTTPoison.Response{body: body} = Client.get_records(client, query, "tsv")
+{:ok, stream} = StringIO.open(body)
+
+records =
+  IO.binstream(stream, :line)
+  |> CSV.decode!(separator: ?\\t, headers: true)
+  |> Enum.map(& &1)
+
+length(records)
+# 2
+```
 
 ### Getting Records as GeoJSON
 
@@ -124,38 +145,23 @@ You can provide a third argument to `Socrata.Client.get_records/4` to specify
 the API response syntax. In this case, we'll set it to `"geojson"` and get
 back an encoded GeoJSON document in the response body.
 
-    alias Socrata.{Client, Query}
+```elixir
+alias Socrata.{Client, Query}
 
-    query =
-      Query.new()
-      |> Query.limit(5)
+client = Client.new("data.cityofchicago.org")
 
-    Client.new("yama-9had", "data.cityofchicago.org")
-    |> Client.get_records(query, "geojson")
+query =
+  Query.new("yama-9had")
+  |> Query.limit(2)
 
-    # %HTTPoison.Response{
-    #   body: "{
-    #     "crs": {
-    #       "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" },
-    #       "type": "name"
-    #     },
-    #     "features": [
-    #       {
-    #         "geometry": {
-    #           "coordinates": [-87.725100208587, 41.903236038454],
-    #           "type": "Point"
-    #         },
-    #         "properties": { ... },
-    #         "type": "Feature"
-    #       },
-    #       ...
-    #     ],
-    #     "type": "FeatureCollection"
-    #   }",
-    #   headers: [ {"X-Socrata-RequestId", "blahblahblah"}, ... ],
-    #   request_url: "https://data.cityofchicago.org/resource/6zsd-86xi.tsv?%24limit=5",
-    #   status_code: 200
-    # }
+%HTTPoison.Response{body: body} = Client.get_records(client, query, "geojson")
+
+%{"crs" => _, "type" => "FeatureCollection", "features" => records} =
+  Jason.decode!(body)
+
+length(records)
+# 2
+```
 
 ### Passing HTTPoison Options
 
@@ -167,38 +173,17 @@ By doing this, the library hands over full control of the request/response
 life cycle to you. By default it sends the request as a standard, synchronous
 blocking call that gets a complete response object.
 
-Say, for example, you're passing an incredibly time consuming query to the
-API and you know the default 5000 ms timeout will trip your request. You can
-pass the `timeout` key to the options to increase the wait time for the
-response.
+```elixir
+alias Socrata.{Client, Query}
 
-    alias Socrata.{Client, Query}
+client = Client.new("data.cityofchicago.org")
 
-    query =
-      Query.new()
-      |> Query.select(~w|:id name location|)
-      |> Query.where("is_within(location, to_polygon(\" ... \")) and :created_on > ' ... '")
-      |> Query.order("name asc")
-      |> Query.limit(100)
-      |> Query.offset(2_000)
+query =
+  Query.new("yama-9had")
+  |> Query.limit(2)
 
-    Client.new("asdf-jkl1", "example.com")
-    |> Client.get_records(query, "json", timeout: :60_000)
+%HTTPoison.AsyncResponse{id: id} = Client.get_records(client, query, "json", stream_to: self())
+is_reference(id)
 
-You could also convert the standard response to an asynchronous response
-using the `stream_to` key and using a `receive do` block to handle the
-asynchronous response.
-
-    alias Socrata.{Client, Query}
-
-    query =
-      Query.new()
-      |> Query.select(~w|:id name location|)
-      |> Query.where("is_within(location, to_polygon(\" ... \")) and :created_on > ' ... '")
-      |> Query.order("name asc")
-      |> Query.limit(100)
-      |> Query.offset(2_000)
-
-    %HTTPoison.AsyncResponse{id: id} =
-      Client.new("asdf-jkl1", "example.com")
-      |> Client.get_records(query, "geojson", stream_to: self())
+# true
+```

@@ -16,18 +16,31 @@ defmodule Socrata.Client do
   """
 
   @typedoc ""
-  @type t :: %__MODULE__{fourby: String.t(), domain: String.t(), app_token: String.t()}
+  @type t :: %__MODULE__{domain: String.t(), app_token: String.t()}
 
-  defstruct fourby: nil, domain: nil, app_token: nil
+  defstruct domain: nil, app_token: nil
 
   @doc """
   Creates a new Client struct.
+
+  ## Examples
+
+      iex> # either no token or relying on app config
+      iex> alias Socrata.Client
+      iex> Client.new("data.cityofchicago.org")
+      %Socrata.Client{domain: "data.cityofchicago.org", app_token: nil}
+
+      iex> # explicitly setting up with a token
+      iex> alias Socrata.Client
+      iex> Client.new("data.cityofchicago.org", "blah blah blah")
+      %Socrata.Client{domain: "data.cityofchicago.org", app_token: "blah blah blah"}
   """
-  @spec new(String.t(), String.t(), String.t()) :: Socrata.Client.t()
-  def new(fourby, domain \\ nil, app_token \\ nil) do
+  @spec new(String.t(), String.t()) :: Socrata.Client.t()
+  def new(domain \\ nil, app_token \\ nil) do
     domain = Application.get_env(:socrata, :domain, domain)
     token = Application.get_env(:socrata, :app_token, app_token)
-    %Socrata.Client{fourby: fourby, domain: domain, app_token: token}
+
+    %Socrata.Client{domain: domain, app_token: token}
   end
 
   @doc """
@@ -40,21 +53,15 @@ defmodule Socrata.Client do
 
   ## Example
 
-      alias Socrata.Client
-
-      Rader.new("6zsd-86xi", "data.cityofchicago.org")
-      |> Client.get_view()
-
-      # %HTTPoison.Response{
-      #   body: "{\\"name\\": \\"Crimes - 2001 to present\\", ... }",
-      #   headers: [ {"X-Socrata-RequestId", "blahblahblah"}, ... ],
-      #   request_url: "https://data.cityofchicago.org/views/6zsd-86xi.json",
-      #   status_code: 200
-      # }
+      iex> alias Socrata.Client
+      iex> %HTTPoison.Response{body: body} = Client.new("data.cityofchicago.org") |> Client.get_view("yama-9had")
+      iex> details = Jason.decode!(body)
+      iex> Map.keys(details)
+      ["oid", "publicationAppendEnabled", "category", "numberOfComments", "createdAt", "attribution", "hideFromDataJson", "query", "id", "tableAuthor", "rights", "tableId", "attributionLink", "owner", "viewCount", "grants", "downloadCount", "flags", "publicationGroup", "name", "averageRating", "publicationDate", "hideFromCatalog", "provenance", "totalTimesRated", "description", "metadata", "viewLastModified", "rowsUpdatedAt", "rowsUpdatedBy", "viewType", "newBackend", "publicationStage", "tags", "columns"]
   """
-  @spec get_view(Socrata.Client.t(), keyword()) :: HTTPoison.Response.t() | HTTPoison.AsyncResponse.t()
-  def get_view(%Socrata.Client{} = r, opts \\ []),
-    do: send_request(r, "views", "json", opts)
+  @spec get_view(Socrata.Client.t(), String.t(), keyword()) :: HTTPoison.Response.t() | HTTPoison.AsyncResponse.t()
+  def get_view(%Socrata.Client{} = r, fourby, opts \\ []),
+    do: send_request(r, "views", fourby, "json", opts)
 
   @doc """
   Gets the records for a data set.
@@ -66,37 +73,60 @@ defmodule Socrata.Client do
 
   **Note:** the `params` key of the options is overwritten by the query struct.
 
-  ## Example
+  ## Examples
 
-        alias Socrata.{Client, Query}
+        iex> # get regular json response
+        iex> alias Socrata.{Client, Query}
+        iex> client = Client.new("data.cityofchicago.org")
+        iex> query = Query.new("yama-9had") |> Query.limit(2)
+        iex> %HTTPoison.Response{body: body} = Client.get_records(client, query)
+        iex> records = Jason.decode!(body)
+        iex> length(records)
+        2
 
-        query =
-          Query.new()
-          |> Query.limit(5)
+        iex> # get csv response
+        iex> alias Socrata.{Client, Query}
+        iex> client = Client.new("data.cityofchicago.org")
+        iex> query = Query.new("yama-9had") |> Query.limit(2)
+        iex> %HTTPoison.Response{body: body} = Client.get_records(client, query, "csv")
+        iex> {:ok, stream} = StringIO.open(body)
+        iex> records = IO.binstream(stream, :line) |> CSV.decode!(headers: true) |> Enum.map(& &1)
+        iex> length(records)
+        2
 
-        Client.new("6zsd-86xi", "data.cityofchicago.org")
-        |> Client.get_records(query)
+        iex> # get tsv response
+        iex> alias Socrata.{Client, Query}
+        iex> client = Client.new("data.cityofchicago.org")
+        iex> query = Query.new("yama-9had") |> Query.limit(2)
+        iex> %HTTPoison.Response{body: body} = Client.get_records(client, query, "tsv")
+        iex> {:ok, stream} = StringIO.open(body)
+        iex> records = IO.binstream(stream, :line) |> CSV.decode!(separator: ?\\t, headers: true) |> Enum.map(& &1)
+        iex> length(records)
+        2
 
-        # %HTTPoison.Response{
-        #   body: "[{\\"arrest\\":false,\\"beat\\":\\"0412\\",\\"block\\":\\"016XX E 86TH PL\\", ...}, ... ]",
-        #   headers: [ {"X-Socrata-RequestId", "blahblahblah"}, ... ],
-        #   request_url: "https://data.cityofchicago.org/resource/6zsd-86xi.json?%24limit=5",
-        #   status_code: 200
-        # }
+        iex> # get geojson response
+        iex> alias Socrata.{Client, Query}
+        iex> client = Client.new("data.cityofchicago.org")
+        iex> query = Query.new("yama-9had") |> Query.limit(2)
+        iex> %HTTPoison.Response{body: body} = Client.get_records(client, query, "geojson")
+        iex> %{"crs" => _, "type" => "FeatureCollection", "features" => records} = Jason.decode!(body)
+        iex> length(records)
+        2
+
+        # get an asynchronous response
+        iex> alias Socrata.{Client, Query}
+        iex> client = Client.new("data.cityofchicago.org")
+        iex> query = Query.new("yama-9had") |> Query.limit(2)
+        iex> %HTTPoison.AsyncResponse{id: id} = Client.get_records(client, query, "json", stream_to: self())
+        iex> is_reference(id)
+        true
   """
   @spec get_records(Socrata.Client.t(), Socrata.Query.t(), String.t(), keyword()) :: HTTPoison.Response.t() | HTTPoison.AsyncResponse.t()
   def get_records(%Socrata.Client{} = r, %Socrata.Query{} = query \\ nil, fmt \\ "json", opts \\ [])
     when is_binary(fmt) and fmt in ["json", "csv", "tsv", "geojson"]
   do
-    query =
-      case query do
-        nil   -> Socrata.Query.new()
-        query -> query
-      end
-
     opts = Keyword.merge(opts, [params: Enum.into(query.state, [])])
-
-    send_request(r, "resource", fmt, opts)
+    send_request(r, "resource", query.fourby, fmt, opts)
   end
 
   @vsn Application.spec(:socrata, :vsn)
@@ -105,10 +135,11 @@ defmodule Socrata.Client do
   # params:
   #   - client is the client struct to pluck the 4x4, domain and token
   #   - endpoint is the api endpoint ("view" or "resource")
+  #   - fourby is the data set indentifier from the query
   #   - format is the response format ("json" or "csv")
   #   - opts is a keyword list of HTTPoison request options
-  defp send_request(client, endpoint, format, opts) do
-    url = "https://#{client.domain}/#{endpoint}/#{client.fourby}.#{format}"
+  defp send_request(client, endpoint, fourby, format, opts) do
+    url = "https://#{client.domain}/#{endpoint}/#{fourby}.#{format}"
 
     headers = ["User-Agent": "socrata-elixir-client v#{@vsn}"]
     headers =
