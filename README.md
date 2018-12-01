@@ -11,7 +11,7 @@ application, add the following to your `mix.exs` file:
 ```elixir
 defp deps do
   [
-    {:socrata, ">= 0.0.0"}
+    {:socrata, "~> 2.0.0"}
   ]
 end
 ```
@@ -23,13 +23,13 @@ application's `config/config.exs` file:
 
 ```elixir
 config :socrata,
-  domain: "example.com",
+  default_format: "json",
   app_token: "blah blah blah"
 ```
 
-Using the `domain` config sets a default Socrata domain for all of your
-requests. This can be overwritten when calling `Socrata.Client.new/3` if
-you need a one off connection to another Socrata deployment.
+Using the `default_format` config sets a default response type for all of your
+requests. This can be overwritten when calling client functions with the
+`format` option.
 
 Using the `app_token` add the `X-App-Token` header to all of your requests.
 Having a token greatly increases your rate limit. For more information about
@@ -46,22 +46,22 @@ There are two endpoints that the `Socrata.Client` module will work with:
 ### Metadata Client Example
 
 ```elixir
-alias Socrata.Client
+alias Socrata.{Client, Query}
 
-%HTTPoison.Response{body: body} =
-  Client.new("data.cityofchicago.org")
-  |> Client.get_view("yama-9had")
+query = Query.new(fourby: "yama-9had", domain: "data.cityofchicago.org")
 
+{:ok, %HTTPoison.Response{body: body}} = Client.get_view(query)
 details = Jason.decode!(body)
-Map.keys(details)
 
+Map.keys(details)
 # ["oid", "publicationAppendEnabled", "category", "numberOfComments",
-#  "createdAt", "attribution", "hideFromDataJson", "query", "id", "tableAuthor"
-#  "rights", "tableId", "attributionLink", "owner", "viewCount", "grants",
-#  "downloadCount", "flags", "publicationGroup", "name", "averageRating",
-#  "publicationDate", "hideFromCatalog", "provenance", "totalTimesRated",
-#  "description", "metadata", "viewLastModified", "rowsUpdatedAt", "rowsUpdatedBy",
-#  "viewType", "newBackend", "publicationStage", "tags", "columns"]
+#  "createdAt", "attribution", "hideFromDataJson", "query", "id",
+#  "tableAuthor", "rights", "tableId", "attributionLink", "owner",
+#  "viewCount", "grants", "downloadCount", "flags", "publicationGroup",
+#  "name", "averageRating", "publicationDate", "hideFromCatalog",
+#  "provenance", "totalTimesRated", "description", "metadata",
+#  "viewLastModified", "rowsUpdatedAt", "rowsUpdatedBy", "viewType",
+#  "newBackend", "publicationStage", "tags", "columns"]
 ```
 
 ### Getting Records as JSON
@@ -72,16 +72,12 @@ syntax and the response body will be encoded JSON.
 ```elixir
 alias Socrata.{Client, Query}
 
-client = Client.new("data.cityofchicago.org")
+query = Query.new("yama-9had", "data.cityofchicago.org") |> Query.limit(2)
 
-query =
-  Query.new("yama-9had")
-  |> Query.limit(2)
-
-%HTTPoison.Response{body: body} = Client.get_records(client, query)
+{:ok, %HTTPoison.Response{body: body}} = Client.get_records(query)
 records = Jason.decode!(body)
-length(records)
 
+length(records)
 # 2
 ```
 
@@ -94,15 +90,10 @@ an encoded CSV document in the response body.
 ```elixir
 alias Socrata.{Client, Query}
 
-client = Client.new("data.cityofchicago.org")
+query = Query.new("yama-9had", "data.cityofchicago.org") |> Query.limit(2)
 
-query =
-  Query.new("yama-9had")
-  |> Query.limit(2)
-
-%HTTPoison.Response{body: body} = Client.get_records(client, query, "csv")
+{:ok, %HTTPoison.Response{body: body}} = Client.get_records(query, format: "csv")
 {:ok, stream} = StringIO.open(body)
-
 records =
   IO.binstream(stream, :line)
   |> CSV.decode!(headers: true)
@@ -121,13 +112,10 @@ an encoded TSV document in the response body.
 ```elixir
 alias Socrata.{Client, Query}
 
-client = Client.new("data.cityofchicago.org")
+query = Query.new("yama-9had", "data.cityofchicago.org") |> Query.limit(2)
 
-query =
-  Query.new("yama-9had")
-  |> Query.limit(2)
+{:ok, %HTTPoison.Response{body: body}} = Client.get_records(query, format: "tsv")
 
-%HTTPoison.Response{body: body} = Client.get_records(client, query, "tsv")
 {:ok, stream} = StringIO.open(body)
 
 records =
@@ -148,16 +136,10 @@ back an encoded GeoJSON document in the response body.
 ```elixir
 alias Socrata.{Client, Query}
 
-client = Client.new("data.cityofchicago.org")
+query = Query.new("yama-9had", "data.cityofchicago.org") |> Query.limit(2)
 
-query =
-  Query.new("yama-9had")
-  |> Query.limit(2)
-
-%HTTPoison.Response{body: body} = Client.get_records(client, query, "geojson")
-
-%{"crs" => _, "type" => "FeatureCollection", "features" => records} =
-  Jason.decode!(body)
+{:ok, %HTTPoison.Response{body: body}} = Client.get_records(query, format: "geojson")
+%{"crs" => _, "type" => "FeatureCollection", "features" => records} = Jason.decode!(body)
 
 length(records)
 # 2
@@ -174,16 +156,11 @@ life cycle to you. By default it sends the request as a standard, synchronous
 blocking call that gets a complete response object.
 
 ```elixir
-alias Socrata.{Client, Query}
+  alias Socrata.{Client, Query}
 
-client = Client.new("data.cityofchicago.org")
+  query = Query.new("yama-9had", "data.cityofchicago.org") |> Query.limit(2)
+  {:ok, %HTTPoison.AsyncResponse{id: id}} = Client.get_records(query, stream_to: self())
 
-query =
-  Query.new("yama-9had")
-  |> Query.limit(2)
-
-%HTTPoison.AsyncResponse{id: id} = Client.get_records(client, query, "json", stream_to: self())
-is_reference(id)
-
-# true
-```
+  is_reference(id)
+  # true
+  ```

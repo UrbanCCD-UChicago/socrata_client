@@ -10,16 +10,36 @@ defmodule Socrata.Query do
   are implemented here. Each function composes a base query.
   """
 
-  @typedoc ""
-  @type t :: %__MODULE__{fourby: String.t(), state: map()}
+  alias Socrata.Query
 
-  defstruct fourby: nil, state: %{}
+  @type t :: %__MODULE__{domain: String.t(), fourby: String.t(), state: map()}
+
+  defstruct domain: nil, fourby: nil, state: %{}
 
   @doc """
-  Creates a new query struct.
+  Creates a new query struct from a keywrod list.
+
+  ## Example
+
+      iex> alias Socrata.Query, as: Q
+      iex> Q.new(fourby: "asdf-asdf", domain: "example.com")
+      %Socrata.Query{fourby: "asdf-asdf", domain: "example.com", state: %{}}
   """
-  @spec new(String.t()) :: Socrata.Query.t()
-  def new(fourby), do: %Socrata.Query{fourby: fourby}
+  @spec new(keyword()) :: Query.t()
+  def new(opts) when is_list(opts), do:
+    new(opts[:fourby], opts[:domain])
+
+  @doc """
+  Creates a new query struct from positional fourby and domain arguments.
+
+  ## Example
+
+      iex> alias Socrata.Query, as: Q
+      iex> Q.new("asdf-asdf", "example.com")
+      %Socrata.Query{fourby: "asdf-asdf", domain: "example.com", state: %{}}
+  """
+  @spec new(String.t(), String.t()) :: Query.t()
+  def new(fourby, domain), do: struct!(Query, domain: domain, fourby: fourby)
 
   @doc """
   Adds a simple field filter to the query.
@@ -29,11 +49,11 @@ defmodule Socrata.Query do
 
   ## Example
 
-      iex> alias Socrata.Query
-      iex> Query.new("asdf-asdf") |> Query.filter("name", "whatever")
-      %Socrata.Query{fourby: "asdf-asdf", state: %{"name" => "whatever"}}
+      iex> alias Socrata.Query, as: Q
+      iex> Q.new("asdf-asdf", "example.com") |> Q.filter("name", "whatever")
+      %Socrata.Query{fourby: "asdf-asdf", domain: "example.com", state: %{"name" => "whatever"}}
   """
-  @spec filter(Socrata.Query.t(), String.t(), any()) :: Socrata.Query.t()
+  @spec filter(Query.t(), String.t(), any()) :: Query.t()
   def filter(query, key, value) when is_binary(key) do
     q = Map.put(query.state, key, value)
     struct!(query, state: q)
@@ -48,11 +68,11 @@ defmodule Socrata.Query do
 
   ## Example
 
-      iex> alias Socrata.Query
-      iex> Query.new("asdf-asdf") |> Query.select(~w|name location|)
-      %Socrata.Query{fourby: "asdf-asdf", state: %{"$select" => "name, location"}}
+      iex> alias Socrata.Query, as: Q
+      iex> Q.new("asdf-asdf", "example.com") |> Q.select(~w|name location|)
+      %Socrata.Query{fourby: "asdf-asdf", domain: "example.com", state: %{"$select" => "name, location"}}
   """
-  @spec select(Socrata.Query.t(), list()) :: Socrata.Query.t()
+  @spec select(Query.t(), list()) :: Query.t()
   def select(query, columns) do
     cols = Enum.map(columns, & "#{&1}") |> Enum.join(", ")
     filter(query, "$select", cols)
@@ -67,11 +87,11 @@ defmodule Socrata.Query do
 
   ## Example
 
-      iex> alias Socrata.Query
-      iex> Query.new("asdf-asdf") |> Query.where("height >= 1000")
-      %Socrata.Query{fourby: "asdf-asdf", state: %{"$where" => "height >= 1000"}}
+      iex> alias Socrata.Query, as: Q
+      iex> Q.new("asdf-asdf", "example.com") |> Q.where("height >= 1000")
+      %Socrata.Query{fourby: "asdf-asdf", domain: "example.com", state: %{"$where" => "height >= 1000"}}
   """
-  @spec where(Socrata.Query.t(), String.t()) :: Socrata.Query.t()
+  @spec where(Query.t(), String.t()) :: Query.t()
   def where(query, expression), do: filter(query, "$where", expression)
 
   @doc """
@@ -83,11 +103,11 @@ defmodule Socrata.Query do
 
   ## Example
 
-      iex> alias Socrata.Query
-      iex> Query.new("asdf-asdf") |> Query.order("name ASC")
-      %Socrata.Query{fourby: "asdf-asdf", state: %{"$order" => "name ASC"}}
+      iex> alias Socrata.Query, as: Q
+      iex> Q.new("asdf-asdf", "example.com") |> Q.order("name ASC")
+      %Socrata.Query{fourby: "asdf-asdf", domain: "example.com", state: %{"$order" => "name ASC"}}
   """
-  @spec order(Socrata.Query.t(), String.t()) :: Socrata.Query.t()
+  @spec order(Query.t(), String.t()) :: Query.t()
   def order(query, expression), do: filter(query, "$order", expression)
 
   @doc """
@@ -99,11 +119,11 @@ defmodule Socrata.Query do
 
   ## Example
 
-      iex> alias Socrata.Query
-      iex> Query.new("asdf-asdf") |> Query.select(["location", "SUM(attendees)"]) |> Query.group("location")
-      %Socrata.Query{fourby: "asdf-asdf", state: %{"$select" => "location, SUM(attendees)", "$group" => "location"}}
+      iex> alias Socrata.Query, as: Q
+      iex> Q.new("asdf-asdf", "example.com") |> Q.select(["location", "SUM(attendees)"]) |> Q.group("location")
+      %Socrata.Query{fourby: "asdf-asdf", domain: "example.com", state: %{"$select" => "location, SUM(attendees)", "$group" => "location"}}
   """
-  @spec group(Socrata.Query.t(), String.t()) :: Socrata.Query.t()
+  @spec group(Query.t(), String.t()) :: Query.t()
   def group(query, expression), do: filter(query, "$group", expression)
 
   @doc """
@@ -115,11 +135,11 @@ defmodule Socrata.Query do
 
   ## Example
 
-      iex> alias Socrata.Query
-      iex> Query.new("asdf-asdf") |> Query.select(["location", "SUM(attendees) as count"]) |> Query.group("location") |> Query.having("count > 500")
-      %Socrata.Query{fourby: "asdf-asdf", state: %{"$select" => "location, SUM(attendees) as count", "$group" => "location", "$having" => "count > 500"}}
+      iex> alias Socrata.Query, as: Q
+      iex> Q.new("asdf-asdf", "example.com") |> Q.select(["location", "SUM(attendees) as count"]) |> Q.group("location") |> Q.having("count > 500")
+      %Socrata.Query{fourby: "asdf-asdf", domain: "example.com", state: %{"$select" => "location, SUM(attendees) as count", "$group" => "location", "$having" => "count > 500"}}
   """
-  @spec having(Socrata.Query.t(), String.t()) :: Socrata.Query.t()
+  @spec having(Query.t(), String.t()) :: Query.t()
   def having(query, expression), do: filter(query, "$having", expression)
 
   @doc """
@@ -131,11 +151,11 @@ defmodule Socrata.Query do
 
   ## Example
 
-      iex> alias Socrata.Query
-      iex> Query.new("asdf-asdf") |> Query.limit(10)
-      %Socrata.Query{fourby: "asdf-asdf", state: %{"$limit" => 10}}
+      iex> alias Socrata.Query, as: Q
+      iex> Q.new("asdf-asdf", "example.com") |> Q.limit(10)
+      %Socrata.Query{fourby: "asdf-asdf", domain: "example.com", state: %{"$limit" => 10}}
   """
-  @spec limit(Socrata.Query.t(), integer()) :: Socrata.Query.t()
+  @spec limit(Query.t(), integer()) :: Query.t()
   def limit(query, cap) when is_integer(cap), do: filter(query, "$limit", cap)
 
   @doc """
@@ -147,11 +167,11 @@ defmodule Socrata.Query do
 
   ## Example
 
-      iex> alias Socrata.Query
-      iex> Query.new("asdf-asdf") |> Query.limit(5) |> Query.offset(10)
-      %Socrata.Query{fourby: "asdf-asdf", state: %{"$limit" => 5, "$offset" => 10}}
+      iex> alias Socrata.Query, as: Q
+      iex> Q.new("asdf-asdf", "example.com") |> Q.limit(5) |> Q.offset(10)
+      %Socrata.Query{fourby: "asdf-asdf", domain: "example.com", state: %{"$limit" => 5, "$offset" => 10}}
   """
-  @spec offset(Socrata.Query.t(), integer()) :: Socrata.Query.t()
+  @spec offset(Query.t(), integer()) :: Query.t()
   def offset(query, skip) when is_integer(skip), do: filter(query, "$offset", skip)
 
   @doc """
@@ -163,11 +183,11 @@ defmodule Socrata.Query do
 
   ## Example
 
-      iex> alias Socrata.Query
-      iex> Query.new("asdf-asdf") |> Query.q("a bag of words")
-      %Socrata.Query{fourby: "asdf-asdf", state: %{"$q" => "a bag of words"}}
+      iex> alias Socrata.Query, as: Q
+      iex> Q.new("asdf-asdf", "example.com") |> Q.q("a bag of words")
+      %Socrata.Query{fourby: "asdf-asdf", domain: "example.com", state: %{"$q" => "a bag of words"}}
   """
-  @spec q(Socrata.Query.t(), String.t()) :: Socrata.Query.t()
+  @spec q(Query.t(), String.t()) :: Query.t()
   def q(query, expression), do: filter(query, "$q", expression)
 
   @doc """
@@ -179,11 +199,11 @@ defmodule Socrata.Query do
 
   ## Example
 
-      iex> alias Socrata.Query
-      iex> Query.new("asdf-asdf") |> Query.query("SELECT name, location, SUM(attendees) as count GROUP BY location HAVING count > 500")
-      %Socrata.Query{fourby: "asdf-asdf", state: %{"$query" => "SELECT name, location, SUM(attendees) as count GROUP BY location HAVING count > 500"}}
+      iex> alias Socrata.Query, as: Q
+      iex> Q.new("asdf-asdf", "example.com") |> Q.query("SELECT name, location, SUM(attendees) as count GROUP BY location HAVING count > 500")
+      %Socrata.Query{fourby: "asdf-asdf", domain: "example.com", state: %{"$query" => "SELECT name, location, SUM(attendees) as count GROUP BY location HAVING count > 500"}}
   """
-  @spec query(Socrata.Query.t(), String.t()) :: Socrata.Query.t()
+  @spec query(Query.t(), String.t()) :: Query.t()
   def query(query, expression), do: filter(query, "$query", expression)
 
   @doc """
@@ -195,10 +215,10 @@ defmodule Socrata.Query do
 
   ## Example
 
-      iex> alias Socrata.Query
-      iex> Query.new("asdf-asdf") |> Query.ensure_bom()
-      %Socrata.Query{fourby: "asdf-asdf", state: %{"$$bom" => true}}
+      iex> alias Socrata.Query, as: Q
+      iex> Q.new("asdf-asdf", "example.com") |> Q.ensure_bom()
+      %Socrata.Query{fourby: "asdf-asdf", domain: "example.com", state: %{"$$bom" => true}}
   """
-  @spec ensure_bom(Socrata.Query.t()) :: Socrata.Query.t()
+  @spec ensure_bom(Query.t()) :: Query.t()
   def ensure_bom(query), do: filter(query, "$$bom", true)
 end
